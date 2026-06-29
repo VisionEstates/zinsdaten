@@ -1,0 +1,103 @@
+# GitHub Actions Workflow: Zinsen automatisch aktualisieren
+# Datei speichern unter: .github/workflows/update_zinsen.yml
+# im Repository: vision-estates/zinsdaten (oder ähnlich)
+
+name: Zinsen aktualisieren
+
+on:
+  schedule:
+    # Jeden Montag um 07:00 Uhr (UTC)
+    - cron: '0 7 * * 1'
+  workflow_dispatch:  # Auch manuell auslösbar
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Zinsen von Bundesbank & EZB abrufen
+        run: |
+          python3 << 'PYTHON'
+          import urllib.request, json
+          from datetime import datetime
+
+          result = {
+            "updated": datetime.now().strftime("%Y-%m-%d"),
+            "source": "Bundesbank BBK01.SU0503 + EZB FM",
+            "bauzins_10j": None,
+            "ezb_leitzins": None,
+            "anschluss_empfehlung": None,
+            "hinweis": "Automatisch aktualisiert via GitHub Actions."
+          }
+
+          # Bundesbank: Hypothekenzins 5-10 Jahre
+          try:
+            bbk_url = "https://api.bundesbank.de/service/data/BBK_STR/M.BBK01.SU0503.AN.I.ZZ.ZZ.EUR.BB.BB.P?startPeriod=2025-01-01&format=jsondata&detail=dataonly"
+            req = urllib.request.Request(bbk_url, headers={
+              "Accept": "application/json",
+              "User-Agent": "Mozilla/5.0 GitHub-Actions"
+            })
+            with urllib.request.urlopen(req, timeout=15) as r:
+              data = json.loads(r.read())
+            series = data["dataSets"][0]["series"]
+            sk = list(series.keys())[0]
+            obs = series[sk]["observations"]
+            keys = sorted(obs.keys(), key=lambda x: int(x), reverse=True)
+            for k in keys:
+              if obs[k][0] and obs[k][0] > 0:
+                result["bauzins_10j"] = round(obs[k][0], 2)
+                break
+            print(f"Bundesbank OK: {result['bauzins_10j']} %")
+          except Exception as e:
+            print(f"Bundesbank Fehler: {e}")
+            result["bauzins_10j"] = 3.75  # Fallback
+
+          # EZB: Leitzins
+          try:
+            ecb_url = "https://data-api.ecb.europa.eu/service/data/FM/B.U2.EUR.RT0.BB.R.1.EUR.2S.A?startPeriod=2025-01-01&format=jsondata&detail=dataonly"
+            req2 = urllib.request.Request(ecb_url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req2, timeout=15) as r:
+              data2 = json.loads(r.read())
+            series2 = data2["dataSets"][0]["series"]
+            sk2 = list(series2.keys())[0]
+            obs2 = series2[sk2]["observations"]
+            keys2 = sorted(obs2.keys(), key=lambda x: int(x), reverse=True)
+            for k in keys2:
+              if obs2[k][0] is not None:
+                result["ezb_leitzins"] = round(obs2[k][0], 2)
+                break
+            print(f"EZB OK: {result['ezb_leitzins']} %")
+          except Exception as e:
+            print(f"EZB Fehler: {e}")
+            result["ezb_leitzins"] = 2.40  # Fallback
+
+          # Anschluss-Empfehlung: EZB + 1.5% Puffer, auf 0.25% gerundet
+          if result["ezb_leitzins"]:
+            raw = result["ezb_leitzins"] + 1.5
+            result["anschluss_empfehlung"] = round(round(raw * 4) / 4, 2)
+          else:
+            result["anschluss_empfehlung"] = 4.75
+
+          with open("zinsen.json", "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+
+          print(f"Ergebnis: {json.dumps(result, indent=2)}")
+          PYTHON
+
+      - name: Änderungen committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add zinsen.json
+          git diff --staged --quiet || git commit -m "Zinsen aktualisiert $(date +%Y-%m-%d)"
+          git push
