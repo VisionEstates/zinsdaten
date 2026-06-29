@@ -81,12 +81,12 @@ jobs:
             print(f"EZB Fehler: {e}")
             result["ezb_leitzins"] = 2.40  # Fallback
 
-          # Anschluss-Empfehlung: EZB + 1.5% Puffer, auf 0.25% gerundet
-          if result["ezb_leitzins"]:
-            raw = result["ezb_leitzins"] + 1.5
+          # Anschluss-Empfehlung: aktueller Bauzins + 0.5% Risikoaufschlag, auf 0.25% gerundet
+          if result["bauzins_10j"]:
+            raw = result["bauzins_10j"] + 0.5
             result["anschluss_empfehlung"] = round(round(raw * 4) / 4, 2)
           else:
-            result["anschluss_empfehlung"] = 4.75
+            result["anschluss_empfehlung"] = 4.25
 
           with open("zinsen.json", "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
