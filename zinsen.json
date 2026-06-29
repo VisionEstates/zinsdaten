@@ -3,6 +3,6 @@
   "source": "Bundesbank BBK01.SU0503 + EZB FM",
   "bauzins_10j": 3.75,
   "ezb_leitzins": 2.4,
-  "anschluss_empfehlung": 4.75,
-  "hinweis": "Automatisch aktualisiert via GitHub Actions. Werte: Hypothekenzins 5-10J (Bundesbank) und EZB-Einlagenzins."
+  "anschluss_empfehlung": 4.0,
+  "hinweis": "Automatisch aktualisiert via GitHub Actions."
 }
